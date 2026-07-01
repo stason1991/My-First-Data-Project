@@ -1,20 +1,16 @@
-# Разрешаем Git видеть папки, но игнорировать их содержимое
-hh_pages/*
-!hh_pages/.gitkeep
-
-hh_resumes/*
-!hh_resumes/.gitkeep
-
 data/*
 !data/.gitkeep
 
 # Конкретные файлы
+Битва с авторизацией hh.txt
 Бенчмарк презентация.pdf
 Бенчмарки (оформление по примеру).xlsx
 
-#Резервный код, если api одобрят
+# Резервный код, если api одобрят
 Было, если бы был API/
 
 # Кэш Python
-**/__pycache__/
-*.pyc
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+.idea/
