@@ -15,9 +15,5 @@ __pycache__/
 .vscode/
 .idea/
 
-#техническое от ноутбуков
-notebooks.ipynb
-notebooks-checkpoint.ipynb
-
-#ключи
+#Ключи
 .env

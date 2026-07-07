@@ -64,35 +64,21 @@ def parse_html_experience(text):
 
 def parse_html_salary(salary_text):
     """
-    Мультивалютный b2b-конвертер признаков.
-    Автоматически пересчитывает иностранные оклады в рубли по фиксированному курсу
-    и возвращает бинарный маркер валюты для защиты от выбросов.
+    Интеллектуальный мультивалютный b2b-конвертер.
+    Конвертирует валюту в рубли ДО разделения границ, гарантируя
+    возврат изолированных чисел float и сохраняя исходную логику ТЗ.
     """
     if not salary_text or "не указана" in salary_text.lower():
         return None, None, 0
     
-    # Нормализуем текст (удаляем пробелы и невидимые символы)
     text = salary_text.replace("\u202f", "").replace("\xa0", "").replace(" ", "").lower()
     
-    # Извлекаем все группы цифр
+    # Собрали сырые группы цифр
     nums = [float(n) for n in re.findall(r'\d+', text)]
     if not nums: 
         return None, None, 0
         
-    s_from, s_to = None, None
-
-    # Извлекаем конкретные числовые значения nums[0] и nums[-1], не передаём сырые значения в мат. операции
-    if "от" in text and len(nums) >= 1: 
-        s_from = nums[0]
-    if "до" in text and len(nums) >= 1: 
-        s_to = nums[-1]
-        
-    if len(nums) == 2 and s_from is None and s_to is None:
-        s_from, s_to = nums[0], nums[1]
-    elif len(nums) == 1 and s_from is None and s_to is None:
-        s_from = nums[0]
-        
-    # МОДУЛЬ ВАЛЮТНОЙ КОНВЕРТАЦИИ ЧЕРЕЗ ФИКСИРОВАННЫЕ МАКРО-КУРСЫ
+    # Мгновенно определяем макро-курс валюты
     EXCHANGE_RATES = {
         'usd': 92.5, '$': 92.5,
         'eur': 101.2, '€': 101.2,
@@ -104,17 +90,32 @@ def parse_html_salary(salary_text):
     is_foreign_currency = 0
     conversion_factor = 1.0
     
-    # Сканируем строку на наличие признаков иностранных валют
     for currency_key, rate in EXCHANGE_RATES.items():
         if currency_key in text:
             conversion_factor = rate
             is_foreign_currency = 1
-            break # Нашли точное совпадение валюты
+            break
             
-    # Конвертируем границы вилки в рубли на лету
-    if s_from: s_from = s_from * conversion_factor
-    if s_to: s_to = s_to * conversion_factor
+    # Конвертируем абсолютно все найденные числа в рубли СРАЗУ
+    nums = [n * conversion_factor for n in nums]
     
+    s_from, s_to = None, None
+    
+    # Извлекаем строго числовые элементы float по индексам [0] и [-1], а не списки объектов
+    if "от" in text and "до" in text and len(nums) >= 2:
+        s_from = nums[0]
+        s_to = nums[-1]
+    elif "от" in text and len(nums) >= 1:
+        s_from = nums[0]
+    elif "до" in text and len(nums) >= 1:
+        s_to = nums[-1]
+    elif len(nums) == 2:
+        s_from = nums[0]
+        s_to = nums[-1]
+    elif len(nums) == 1:
+        s_from = nums[0]
+        s_to = nums[0]
+        
     return s_from, s_to, is_foreign_currency
 
 def determine_role_class(title_text):
@@ -195,20 +196,19 @@ if __name__ == "__main__":
             salary_el = soup.find(attrs={"data-qa": "vacancy-salary"}) or soup.find(class_=re.compile("salary|compensation"))
             salary_raw_text = salary_el.text.strip() if salary_el else ""
             
-            # Разбор числовых значений и флага мультивалютности
+            # Разбор числовых значений (Границы s_from и s_to уже прилетели в рублях!)
             s_from, s_to, is_foreign = parse_html_salary(salary_raw_text)
             
-            # Игнорируем карточки без указания зарплат для валидности регрессии XGBoost
             if s_from is None and s_to is None: 
                 continue
 
-            # Оффлайн расчет таргета: Вычисляем y_offer строго на основе числовых границ вилки
-            if s_from and s_to: 
+            # Восстановление таргета
+            if s_from is not None and s_to is not None: 
                 y_offer = (s_from + s_to) / 2
-            elif s_from: 
-                y_offer = s_from * 1.15
+            elif s_from is not None: 
+                y_offer = s_from * 1.15  # Матожидание центра 30%-й вилки от нижней границы [2.5]
             else: 
-                y_offer = s_to * 0.85
+                y_offer = s_to * 0.85   # Матожидание центра 30%-й вилки от верхней границы [2.5]
 
             # Извлечение требуемого стажа работы
             exp_el = soup.find(attrs={"data-qa": "vacancy-experience"}) or soup.find(class_=re.compile("experience"))
@@ -247,12 +247,20 @@ if __name__ == "__main__":
                 **BUSINESS_SKILLS_TRIGGERS, 
                 **SOCIAL_INFRA_TRIGGERS
             }
+
+            # Навыки, склонные к ложным срабатываниям на контрастном блоке DS
+            commercial_soft_skills = [
+                'skill_objection_handling', 'skill_cold_sales', 'skill_telemarketing',
+                'skill_cross_sales', 'skill_sales_book_analysis', 'skill_roleplay_defense',
+                'skill_vip_negotiations', 'skill_difficult_clients'
+            ]
             
             for skill_name, phrases_to_search in FULL_PROJECT_VOCABULARY.items():
                 skill_detected = 0
                 
                 # 1. Сначала пробуем извлечь софт-навыки с помощью нейросети RuBERT-tiny
                 if skill_name in SOFT_SKILLS_TRIGGERS:
+                    CURRENT_THRESHOLD = 0.82 if skill_name in commercial_soft_skills else 0.72
                     for s_vec in sentence_vectors:
                         if skill_name in SKILL_VECTORS:
                             for t_vec in SKILL_VECTORS[skill_name]:
