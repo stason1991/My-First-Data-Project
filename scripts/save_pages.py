@@ -136,7 +136,7 @@ for class_id, role_info in TARGET_ROLES.items():
             search_input.clear()
             time.sleep(0.5)
             
-            print(f" ⌨️ [ЭМУЛЯЦИЯ] Вбиваем запрос буква за буквой: '{search_query_clean}'")
+            print(f" [ЭМУЛЯЦИЯ] Вбиваем запрос буква за буквой: '{search_query_clean}'")
             for char in search_query_clean:
                 search_input.send_keys(char)
                 time.sleep(random.uniform(0.05, 0.15)) # Рваная пауза между нажатиями клавиш
@@ -217,7 +217,7 @@ for class_id, role_info in TARGET_ROLES.items():
                     
             print(f"Найдено {len(vacancy_links)} ЧИСТЫХ БАНКОВСКИХ вакансий на странице. Начинаем глубокое скачивание...")
             
-            # --- ЭТАП 2: Переход по ссылкам во вкладках и скачивание развёрнутого HTML (ФИКС ИНДЕКСОВ) ---
+            # --- ЭТАП 2: Переход по ссылкам во вкладках и скачивание развёрнутого HTML ---
             for idx, link in enumerate(vacancy_links, 1):
                 try:
                     vacancy_id = link.split("/vacancy/")[-1]
@@ -230,7 +230,7 @@ for class_id, role_info in TARGET_ROLES.items():
                     # Открываем карточку вакансии в новой вкладке, сохраняя стейт выдачи
                     driver.execute_script(f"window.open('{link}', '_blank');")
                     
-                    # ИСПРАВЛЕНО: Переключаемся строго на ВТОРУЮ вкладку (индекс 1)
+                    # Переключаемся строго на ВТОРУЮ вкладку (индекс 1)
                     driver.switch_to.window(driver.window_handles[1]) 
                     time.sleep(random.uniform(3.5, 5.5))  # Симуляция чтения текста человеком
                     
@@ -247,7 +247,7 @@ for class_id, role_info in TARGET_ROLES.items():
                     # Закрываем вкладку вакансии
                     driver.close()
                     
-                    # ИСПРАВЛЕНО: Возвращаемся строго на ПЕРВУЮ вкладку с поиском (индекс 0)
+                    # Возвращаемся строго на ПЕРВУЮ вкладку с поиском (индекс 0)
                     driver.switch_to.window(driver.window_handles[0]) 
                     
                     time.sleep(random.uniform(1.5, 3.0))
@@ -265,4 +265,4 @@ for class_id, role_info in TARGET_ROLES.items():
                 break
 
 print("\n ВСЕ КЛАССЫ ДОЛЖНОСТЕЙ УСПЕШНО ОБРАБОТАНЫ!")
-# driver.quit()  # ЗАКОММЕНТИРОВАНО, ЧТОБЫ БРАУЗЕР НЕ ЗАКРЫВАЛСЯ
+# driver.quit() 

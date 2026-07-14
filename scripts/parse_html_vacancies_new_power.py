@@ -217,7 +217,7 @@ if __name__ == "__main__":
             for skill_name, phrases_to_search in FULL_PROJECT_VOCABULARY.items():
                 skill_detected = 0
                 if skill_name in SOFT_SKILLS_TRIGGERS:
-                    # ИСПРАВЛЕНО: Переменная CURRENT_THRESHOLD честно задействована в косинусном сходстве!
+                    # Переменная CURRENT_THRESHOLD честно задействована в косинусном сходстве!
                     CURRENT_THRESHOLD = 0.82 if skill_name in commercial_soft_skills else GLOBAL_THRESHOLD
                     for s_vec in sentence_vectors:
                         if skill_name in SKILL_VECTORS:
