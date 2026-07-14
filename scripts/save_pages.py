@@ -8,11 +8,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 
 # === НАСТРОЙКИ ГЛУБИННОГО СБОРА ===
-TARGET_PAGES = 5  # Сколько страниц выдачи обработать за запрос
+TARGET_PAGES = 1  # Сколько страниц выдачи обработать за запрос
 OUTPUT_ROOT = r"C:\Users\Asus\OneDrive\Рабочий стол\Project ML ITMO\Модуль №3 ML System Design and MFDP\MFDP\data\raw\hh_pages"
 OUTPUT_DIR = OUTPUT_ROOT
 
-# Укомплектованная ролевая сетка ИТМО (31 b2b-класс)
+# Укомплектованная ролевая сетка ИТМО (31 класс)
 TARGET_ROLES = {
     1: {"queries": ["специалист доставка карт", "выездной специалист банк", "представитель банк", "доставка банковских карт", "мобильный специалист банк", "курьер в банк"], "desc": "Мобильный фронт / Доставка карт", "grades": False},
     2: {"queries": ["прямые продажи банк", "менеджер ГПП", "выездной менеджер банк", "активные продажи банк", "полевой менеджер банк", "коммерческий лидер банк"], "desc": "Менеджер прямых продаж (ГПП)", "grades": False},
@@ -34,7 +34,7 @@ TARGET_ROLES = {
     18: {"queries": ["главный менеджер резерва банк", "ведущий менеджер группы резерва", "главный подменный менеджер", "ведущий подменный менеджер"], "desc": "Главный менеджер группы резерва", "grades": False},
     19: {"queries": ["заместитель руководителя офиса банк", "заместитель директора отделения банк"], "desc": "Заместитель руководителя офиса", "grades": False},
     20: {"queries": ["руководитель офиса банк", "директор отделения банк", "директор дополнительного офиса банк", "управляющий дополнительным офисом", "начальник отделения банка"], "desc": "Руководитель офиса (P&L)", "grades": False},
-    21: {"queries": ["Data Scientist банк", "Machine Learning Engineer банк"], "desc": "Data Scientist / ML Engineer", "grades": True},
+    21: {"queries": ["Data Scientist банк", "Machine Learning Engineer банк", "ML Engineer", "Аналитик данных", "Data аналитик", "Data engineer", "AI"], "desc": "Data Scientist / ML Engineer", "grades": True},
     22: {"queries": ["Data Engineer банк", "инженер данных банк"], "desc": "Data Engineer / DWH Developer", "grades": True},
     23: {"queries": ["Java разработчик банк"], "desc": "Java Developer (Backend)", "grades": True},
     24: {"queries": ["Системный аналитик банк"], "desc": "Системный аналитик ИТ", "grades": True},
