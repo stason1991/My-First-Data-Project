@@ -15,5 +15,22 @@ __pycache__/
 .vscode/
 .idea/
 
+#и веса
+.huggingface/
+
+# Исключаем локальные папки моделей (они разворачиваются на хосте через Docker volumes)
+models/
+
+# Исключаем виртуальные окружения Anaconda и кэш Python
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
 #Ключи
 .env

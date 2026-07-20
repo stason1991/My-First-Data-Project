@@ -9,8 +9,12 @@ import torch
 from transformers import AutoTokenizer, AutoModel
 from tqdm import tqdm
 from sklearn.decomposition import PCA
+import pickle
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+MODELS_DIR = r"C:\Users\Asus\OneDrive\Рабочий стол\Project ML ITMO\Модуль №3 ML System Design and MFDP\MFDP\models"
+os.makedirs(MODELS_DIR, exist_ok=True)
 
 # Интегрирован импорт BANK_TIERS из центрального конфигурационного файла
 try:
@@ -60,7 +64,7 @@ def parse_html_salary(salary_text):
     """
     Интеллектуальный мультивалютный b2b-конвертер.
     Конвертирует валюту в рубли ДО разделения границ, гарантируя
-    возврат изолированных чисел float и жестко выжигая МРОТ-шум (3, 4, 6) в None.
+    возврат изолированных чисел float и жестко выжигая МРОТ-шум в None.
     """
     if not salary_text or "не указана" in salary_text.lower():
         return None, None, 0
@@ -92,12 +96,12 @@ def parse_html_salary(salary_text):
     
     s_from, s_to = None, None
     
-    # Распределяем границы строго как изолированные числа float (берём [0] элемент списка)
+    # Распределяем границы строго как изолированные числа float
     if "от" in text and "до" in text and len(clean_nums) >= 2:
         s_from = clean_nums[0]
         s_to = clean_nums[-1]
     elif "от" in text and len(clean_nums) >= 1:
-        s_from = clean_nums[0]  #б ерем число, не список
+        s_from = clean_nums[0]  
         s_to = None
     elif "до" in text and len(clean_nums) >= 1:
         valid_to_nums = [n for n in clean_nums if n is not None]
@@ -110,7 +114,7 @@ def parse_html_salary(salary_text):
         s_from = clean_nums[0]
         s_to = clean_nums[0]
         
-    return s_from, s_to, is_foreign
+    return s_from, s_to, is_foreign_currency
 
 def determine_role_class(title_text):
     """Ликвидация размытых границ классов на основе селективного ROLE_PATTERNS"""
@@ -157,7 +161,7 @@ if __name__ == "__main__":
     html_files = glob.glob(os.path.join(INPUT_DIR, "class_*", "vacancy_*.html"))
     
     dataset = []
-    all_description_embeddings = [] # Накопитель семантических векторов описаний вакансий
+    all_description_embeddings = [] 
     
     for file_path in tqdm(sorted(html_files), desc="Семантическая разметка матрицы X"):
         try:
@@ -177,7 +181,6 @@ if __name__ == "__main__":
             s_from, s_to, is_foreign = parse_html_salary(salary_raw_text)
             if s_from is None and s_to is None: continue
 
-            # Восстановление таргета с применением коэффициентов 1.15 и 0.85
             if s_from is not None and s_to is not None: y_offer = (s_from + s_to) / 2
             elif s_from is not None: y_offer = s_from * 1.15
             else: y_offer = s_to * 0.85
@@ -189,8 +192,7 @@ if __name__ == "__main__":
                 exp_text = exp_match.group(0) if exp_match else ""
                 
             geo_tier = determine_region_tier_from_html(html_content, title)
-            bank_tier = determine_bank_tier(soup) # Маркируем бренд банка
-            
+            bank_tier = determine_bank_tier(soup)
             desc_el = soup.find(attrs={"data-qa": "vacancy-description"}) or soup.find(class_=re.compile("description"))
             if not desc_el: continue
 
@@ -217,7 +219,6 @@ if __name__ == "__main__":
             for skill_name, phrases_to_search in FULL_PROJECT_VOCABULARY.items():
                 skill_detected = 0
                 if skill_name in SOFT_SKILLS_TRIGGERS:
-                    # Переменная CURRENT_THRESHOLD честно задействована в косинусном сходстве!
                     CURRENT_THRESHOLD = 0.82 if skill_name in commercial_soft_skills else GLOBAL_THRESHOLD
                     for s_vec in sentence_vectors:
                         if skill_name in SKILL_VECTORS:
@@ -226,7 +227,6 @@ if __name__ == "__main__":
                                     skill_detected = 1
                                     break
                         if skill_detected: break
-                
                 if not skill_detected:
                     for phrase in phrases_to_search:
                         pattern = r'\b' + re.escape(phrase.lower().strip()) + r'\b'
@@ -286,5 +286,12 @@ if __name__ == "__main__":
         
         os.makedirs(os.path.dirname(OUTPUT_INTERIM_GRADES), exist_ok=True)
         df_final.to_csv(OUTPUT_INTERIM_GRADES, index=False, encoding='utf-8-sig')
+
+        # Упаковываем сохранение pickle строго внутри блока 'if dataset:' с правильным 'pca'
+        pca_pkl_path = os.path.join(MODELS_DIR, "pca_transformer.pkl")
+        with open(pca_pkl_path, "wb") as f:
+            pickle.dump(pca, f) 
+            
+        print(f"Объект сжатия PCA успешно сохранен в pkl-файл: {pca_pkl_path}")
         print(f"\n Промышленный пайплайн выполнен! Стерильный файл сохранен: {OUTPUT_INTERIM_GRADES}")
         print(f"Итоговая размерность новой матрицы признаков X: {df_final.shape}")
