@@ -13,7 +13,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
 from scripts.database import SessionLocal
 import scripts.models as models
-# Импортируем полный словарь триггеров
 import skills_vocabulary as voc
 
 celery_app = Celery("tasks", broker=Config.REDIS_URL, backend=Config.REDIS_URL)
@@ -65,10 +64,8 @@ def predict_salary_task(prediction_id: int, payload: dict, raw_text: str):
         input_data = {col: 0.0 for col in bst_model.feature_names_in_}
         
         # Этап 1: Гибридный NLP-анализ текста (REGEX ПО ПОЛНОМУ СЛОВАРЮ)
-        # Мы ищем ключевые слова во всем тексте вакансии, переведенном в нижний регистр
         clean_text = raw_text.lower()
         
-        # Объединяем все группы навыков для сквозного парсинга
         all_skills_vocab = {}
         all_skills_vocab.update(voc.SOFT_SKILLS_TRIGGERS)
         all_skills_vocab.update(voc.HARD_SKILLS_TRIGGERS)
@@ -78,75 +75,76 @@ def predict_salary_task(prediction_id: int, payload: dict, raw_text: str):
         activated_pure_skills_count = 0
         total_pure_skills_in_model = 0
         
-        # Служебный список колонок, которые не относятся к чистым хард/софт навыкам
-        meta_cols = ['experience_months', 'skills_completion_rate', 'text_pca_1', 'text_pca_2', 'text_pca_3']
+        meta_cols = ['experience_months', 'skills_completion_rate', 'text_pca_1', 'text_pca_2', 'text_pca_3', 'role_class', 'region_tier', 'bank_tier']
         
         for skill_feature, keywords in all_skills_vocab.items():
-            # Проверяем, участвует ли этот признак вообще в структуре нашей модели
             if skill_feature in input_data:
-                # Взводим бинарный флаг, если нашли хотя бы одно совпадение из skills_vocabulary
                 is_found = any(bool(re.search(r'\b' + re.escape(kw) + r'\b', clean_text)) for kw in keywords)
                 if is_found:
                     input_data[skill_feature] = 1.0
                     
-                # Если это чистый ИТ-или бизнес-навык, учитываем его в расчете плотности (как на этапе EDA)
-                if skill_feature not in meta_cols and not skill_feature.startswith('role_class_') and not skill_feature.startswith('region_tier_') and not skill_feature.startswith('bank_tier_'):
+                if skill_feature not in meta_cols:
                     total_pure_skills_in_model += 1
                     if is_found:
                         activated_pure_skills_count += 1
 
+        # Конвертируем булевые флаги из веб-интерфейса Streamlit в числа
+        for key, value in payload.items():
+            if key in input_data and isinstance(value, bool):
+                input_data[key] = 1.0 if value else 0.0
+
         # Этап 2: Динамический расчет мета-параметров
-        # 1. Заполняем минимальный стаж напрямую из ползунка Streamlit
         input_data['experience_months'] = float(payload['experience_months'])
         
-        # 2. Вычисляем честный skills_completion_rate на основе реально найденных навыков в тексте
         if total_pure_skills_in_model > 0:
             input_data['skills_completion_rate'] = float(activated_pure_skills_count / total_pure_skills_in_model)
         else:
             input_data['skills_completion_rate'] = float(payload['skills_completion_rate'])
 
-        # Этап 3: семантический анализ и сжатие PCA (RuBERT-tiny)
-        # Извлекаем контекстный эмбеддинг из полного текста,
-        # так как PCA обучался строго на признаках текстовых описаний, а не коротких названий вакансий
+        # Этап 3: Семантический анализ и сжатие PCA (RuBERT-tiny)
         embedding = get_bert_embedding(raw_text)
-        
-        # Проецируем плотный вектор через сохраненный трансформер PCA (transform вместо fit_transform)
         pca_features = pca_transformer.transform(embedding.reshape(1, -1)).flatten()
         
-        # Безопасно раскладываем 3 полученные ортогональные координаты по фичам матрицы X
         input_data['text_pca_1'] = float(pca_features[0])
         input_data['text_pca_2'] = float(pca_features[1])
         input_data['text_pca_3'] = float(pca_features[2])
 
-        # Этап 4: активация one-hot категорий (классы, тыры регионов и классы)
-        role_key = f"role_class_{payload['role_class']}"
-        region_key = f"region_tier_{payload['region_tier']}"
-        bank_key = f"bank_tier_{payload['bank_tier']}"
+        # Этап 4: Передаем сырые категориальные значения, как было на обучении
+        input_data['role_class'] = int(payload.get('role_class', payload.get('role_id', 1)))
+        input_data['region_tier'] = str(payload['region_tier'])
+        input_data['bank_tier'] = str(payload['bank_tier'])
         
-        if role_key in input_data: input_data[role_key] = 1.0
-        if region_key in input_data: input_data[region_key] = 1.0
-        if bank_key in input_data: input_data[bank_key] = 1.0
-        
-        # Офисная санитария фичей: если класс 8 или 9, принудительно обнуляем авто (как в финальной ML-сессии)
-        if int(payload['role_class']) in [8, 9] and 'has_car_and_driver_license' in input_data:
+        # Офисная санитария фичей
+        if input_data['role_class'] in [8, 9] and 'has_car_and_driver_license' in input_data:
             input_data['has_car_and_driver_license'] = 0.0
 
-        # Этап 5: инференс модели XGBOOST
-        # Превращаем словарь в DataFrame с идеальным соблюдением порядка колонок обучения
+        # Этап 5: Строгое разделение типов данных для инференса
+        # Создаем DataFrame и выстраиваем точный порядок колонок из модели
         X_infer = pd.DataFrame([input_data])[bst_model.feature_names_in_]
+        
+        # Переводим категориальные столбцы в тип 'category'
+        X_infer['role_class'] = X_infer['role_class'].astype('category')
+        X_infer['region_tier'] = X_infer['region_tier'].astype('category')
+        X_infer['bank_tier'] = X_infer['bank_tier'].astype('category')
+        
+        # Все числовые фичи (навыки, PCA, стаж) приводим к float32
+        numeric_cols = [col for col in X_infer.columns if col not in ['role_class', 'region_tier', 'bank_tier']]
+        X_infer[numeric_cols] = X_infer[numeric_cols].astype('float32')
         
         # Вычисляем непрерывное зарплатное предложение
         prediction = bst_model.predict(X_infer)
         final_predicted_offer = float(np.round(prediction[0], 0))
 
-        # Обновляем логтранзакции инференса в СУБД PostgreSQL
-        db_pred.predicted_offer = final_predicted_offer
-        db_pred.skills_completion_rate = input_data['skills_completion_rate']
+        # Обновляем лог-транзакции инференса в СУБД PostgreSQL
+        db_pred.predicted_offer = int(final_predicted_offer)
+        db_pred.skills_completion_rate = float(input_data['skills_completion_rate'])
         db_pred.status = "SUCCESS"
         db.commit()
         return "SUCCESS"
         
     except Exception as e:
+        db.close()
+        db = SessionLocal()
         db_pred = db.query(models.VacancyPrediction).filter(models.VacancyPrediction.id == prediction_id).first()
         if db_pred:
             db_pred.status = "FAILURE"

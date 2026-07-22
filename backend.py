@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from scripts.database import get_db, engine, Base
 import scripts.models as models
@@ -7,38 +8,74 @@ import scripts.workers as workers
 
 app = FastAPI(title="Salary Prediction b2b REST API", version="1.0.0")
 
+# Настройка CORS для защиты от блокировок запросов со Streamlit
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Автоматическое развертывание схем таблиц в PostgreSQL при старте
 Base.metadata.create_all(bind=engine)
 
 @app.post("/api/v1/predict", response_model=schemas.PredictionResponse, status_code=202)
 def create_prediction(payload: schemas.PredictionRequest, db: Session = Depends(get_db)):
-    # 1. Записываем транзакцию в PostgreSQL, сохраняя 100% входящих параметров
-    db_pred = models.VacancyPrediction(
-        role_class=payload.role_class,
-        experience_months=payload.experience_months,
-        region_tier=payload.region_tier,
-        bank_tier=payload.bank_tier,
-        skills_completion_rate=payload.skills_completion_rate,
-        skill_vip_negotiations=payload.skill_vip_negotiations,
-        skill_cold_sales=payload.skill_cold_sales,
-        skill_initiative_proactivity=payload.skill_initiative_proactivity,
-        status="PENDING"
-    )
-    db.add(db_pred)
-    db.commit()
-    db.refresh(db_pred)
-
-    # 2. МАСШТАБИРУЕМАЯ ML-ОТПРАВКА: Передаем ровно 3 аргумента (raw_text извлечен из Pydantic)
-    task = workers.celery_app.send_task(
-        "scripts.workers.predict_salary_task",
-        args=[db_pred.id, payload.dict(), payload.raw_text]  # ИСПРАВЛЕНО: Добавлен третий обязательный аргумент payload.raw_text
-    )
     
-    # 3. Привязываем сгенерированный Celery UUID к записи в СУБД для поллинга статуса
+    # 1. Извлекаем данные из Pydantic-модели в python-словарь
+    payload_data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    
+    # 2. Выделяем мета-параметры, которые имеют собственные колонки в таблице БД
+    meta_fields = {
+        "role_class", 
+        "experience_months", 
+        "region_tier", 
+        "bank_tier", 
+        "skills_completion_rate"
+    }
+    
+    # Формируем словарь для записи в БД
+    db_data = {k: v for k, v in payload_data.items() if k in meta_fields}
+    
+    # 3. Все остальные поля (все 45 навыков) изолируем и упаковываем в JSON-поле
+    # Исключаем мета-поля и raw_text (текст резюме в БД не пишем ради экономии места)
+    excluded_fields = meta_fields | {"raw_text"}
+    db_data["verified_skills"] = {k: v for k, v in payload_data.items() if k not in excluded_fields}
+    
+    db_data["status"] = "PENDING"
+    
+    try:
+        # Создаем запись в PostgreSQL
+        db_pred = models.VacancyPrediction(**db_data)
+        db.add(db_pred)
+        db.commit()
+        db.refresh(db_pred)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Ошибка записи транзакции в PostgreSQL: {e}"
+        )
+
+    # 4. ML-отправка в Celery: передаем исходный полный payload_data для XGBoost и текст резюме для BERT
+    try:
+        task = workers.celery_app.send_task(
+            "scripts.workers.predict_salary_task",
+            args=[db_pred.id, payload_data, payload.raw_text]
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Сбой брокера очередей Celery при отправке задачи: {e}"
+        )
+    
+    # 5. Привязываем Celery UUID к записи для поллинга статуса
     db_pred.task_id = task.id
     db.commit()
     
     return {"task_id": task.id, "status": "PENDING"}
+
 
 @app.get("/api/v1/predict/status/{task_id}")
 def get_prediction_status(task_id: str, db: Session = Depends(get_db)):
@@ -50,6 +87,7 @@ def get_prediction_status(task_id: str, db: Session = Depends(get_db)):
         "status": db_pred.status,
         "predicted_offer": db_pred.predicted_offer
     }
+
 
 @app.post("/api/v1/feedback")
 def submit_feedback(payload: schemas.FeedbackRequest, db: Session = Depends(get_db)):

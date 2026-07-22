@@ -9,7 +9,7 @@ class PredictionRequest(BaseModel):
     bank_tier: str = Field(..., example="Bank_Tier_1")
     skills_completion_rate: float = Field(0.084, ge=0.0, le=1.0)
     
-    # 1. Группа Soft Skills (🗣️)
+    # 1. Группа Soft Skills
     skill_general_negotiations: bool = False
     skill_vip_negotiations: bool = False
     skill_active_listening: bool = False
@@ -29,7 +29,7 @@ class PredictionRequest(BaseModel):
     skill_mentoring_coaching: bool = False
     skill_initiative_proactivity: bool = False
     
-    # 2. Группа Hard Skills (💻)
+    # 2. Группа Hard Skills
     skill_pc_tablet_advanced: bool = False
     skill_abs_crm: bool = False
     skill_advanced_excel: bool = False
@@ -45,7 +45,7 @@ class PredictionRequest(BaseModel):
     skill_finance_cert_frm: bool = False
     skill_finance_cert_fsfr: bool = False
     
-    # 3. Группа Business Skills (📊)
+    # 3. Группа Business Skills
     skill_kpi_system_management: bool = False
     skill_kpi_troubleshooting_eda: bool = False
     skill_sales_book_analysis: bool = False
@@ -58,7 +58,7 @@ class PredictionRequest(BaseModel):
     skill_compliance_aml_kyc: bool = False
     skill_hr_analytics_metrics: bool = False
     
-    # 4. Группа SOCIAL_INFRA_TRIGGERS (🌐)
+    # 4. Группа SOCIAL_INFRA_TRIGGERS
     edu_level_encoded: bool = True
     has_car_and_driver_license: bool = False
     has_remote_hybrid_schedule: bool = False
@@ -69,3 +69,12 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     task_id: str
     status: str
+
+# Добавляем класс FeedbackRequest для восстановления бэкенда FastAPI
+class FeedbackRequest(BaseModel):
+    prediction_id: int
+    hr_accepted: bool
+    actual_salary: Optional[float] = None
+
+    class Config:
+        from_attributes = True

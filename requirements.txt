@@ -7,9 +7,6 @@ celery>=5.3.1
 redis>=4.6.0
 pytest>=7.4.0
 xgboost>=1.7.5
-# Указываем легковесную CPU-версию PyTorch
---find-links https://pytorch.org
-torch>=2.0.0+cpu
 transformers>=4.30.0
 scikit-learn>=1.2.0
 pandas>=2.0.0

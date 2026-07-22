@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, JSON, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from scripts.database import Base
 
@@ -7,25 +7,33 @@ class VacancyPrediction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     task_id = Column(String, unique=True, index=True, nullable=True)
+    
+    # Мета-параметры кандидата
     role_class = Column(Integer, nullable=False)
     experience_months = Column(Integer, nullable=False)
     region_tier = Column(String, nullable=False)
     bank_tier = Column(String, nullable=False)
     skills_completion_rate = Column(Float, nullable=False)
-    skill_vip_negotiations = Column(Boolean, default=False)
-    skill_cold_sales = Column(Boolean, default=False)
-    skill_initiative_proactivity = Column(Boolean, default=False)
-    predicted_offer = Column(Float, nullable=True)
+    
+    # Хранилище для всех 45 верифицированных навыков
+    # Сюда запишется чистый JSON-словарь со всеми флагами True/False
+    verified_skills = Column(JSON, nullable=False)
+    
+    # Системные поля расчета
+    predicted_offer = Column(Integer, nullable=True)
     status = Column(String, default="PENDING")
 
-    feedbacks = relationship("Feedback", back_populates="prediction")
+    # Связь один-к-одному с таблицей фидбека
+    feedback = relationship("Feedback", back_populates="prediction", uselist=False)
+
 
 class Feedback(Base):
     __tablename__ = "feedbacks"
 
     id = Column(Integer, primary_key=True, index=True)
-    prediction_id = Column(Integer, ForeignKey("predictions.id"))
+    prediction_id = Column(Integer, ForeignKey("predictions.id"), unique=True, nullable=False)
     hr_accepted = Column(Boolean, nullable=False)
-    actual_salary = Column(Float, nullable=True)
+    actual_salary = Column(Integer, nullable=True)
 
-    prediction = relationship("VacancyPrediction", back_populates="feedbacks")
+    # Обратная связь с записью расчета
+    prediction = relationship("VacancyPrediction", back_populates="feedback")
