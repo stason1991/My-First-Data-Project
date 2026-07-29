@@ -10,6 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: always # Автоматический перезапуск СУБД при сбоях хоста
     networks:
       - salary_network
 
@@ -18,6 +19,7 @@ services:
     container_name: salary_redis_broker
     ports:
       - "6379:6379"
+    restart: always
     networks:
       - salary_network
 
@@ -25,8 +27,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
     container_name: salary_fastapi_backend
-    command: uvicorn backend:app --host 0.0.0.0 --port 8000
+    # Добавлен флаг --reload (авто-обновление кода без пересборки)
+    command: uvicorn backend:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/app
       - ./models:/app/models
@@ -35,9 +39,11 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/salary_db
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app:/root/.local/lib/python3.10/site-packages
     depends_on:
       - db
       - redis
+    restart: on-failure
     networks:
       - salary_network
 
@@ -45,17 +51,23 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
     container_name: salary_celery_worker
-    command: celery -A scripts.workers.celery_app worker --loglevel=info --pool=solo
+    # Убран блокирующий --pool=solo. 
+    # Внедрен prefork-пул с --concurrency=4, что позволяет обрабатывать до 4 резюме синхронно,
+    # задействуя многопоточность процессора хоста для расчета RuBERT и SHAP.
+    command: celery -A scripts.workers.celery_app worker --loglevel=info --pool=prefork --concurrency=4
     volumes:
       - .:/app
       - ./models:/app/models
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/salary_db
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app:/root/.local/lib/python3.10/site-packages
     depends_on:
       - redis
       - db
+    restart: on-failure
     networks:
       - salary_network
 
@@ -66,12 +78,14 @@ services:
     container_name: salary_streamlit_ui
     ports:
       - "8501:8501"
+    volumes:
+      - .:/app # Позволяет Streamlit подтягивать изменения UI налету
     depends_on:
       - backend
+    restart: on-failure
     networks:
       - salary_network
 
-# Явно определяем общую сеть
 networks:
   salary_network:
     driver: bridge

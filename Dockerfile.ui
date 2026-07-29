@@ -1,8 +1,19 @@
 FROM python:3.10-slim
+
 WORKDIR /app
-# Копируем и ставим ТОЛЬКО легкие UI-библиотеки
+
+# Копируем изолированный файл UI-зависимостей
 COPY requirements_ui.txt .
+
+# Устанавливаем только легкие пакеты (Streamlit, Requests, Altair, Pandas)
 RUN pip install --no-cache-dir -r requirements_ui.txt
-COPY . .
+
+# Вместо копирования всего репозитория, берем строго фронтенд-код.
+# Веса моделей, код воркеров Celery и бэкенд FastAPI фронтенду физически не нужны.
+COPY app.py .
+
+# Открываем дефолтный порт Streamlit
 EXPOSE 8501
+
+# Запуск интерфейса
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]

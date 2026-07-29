@@ -1,14 +1,21 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
+
 class PredictionRequest(BaseModel):
-    # Мета-параметры позиции
+    # Мета-параметры позиции и грейда
     role_class: int = Field(..., example=8)
     experience_months: int = Field(..., ge=0, le=120)
-    region_tier: str = Field(..., example="Tier-1")
+    region_tier: int = Field(..., example=1)
     bank_tier: str = Field(..., example="Bank_Tier_1")
     skills_completion_rate: float = Field(0.084, ge=0.0, le=1.0)
-    
+
+    # Новые квалификационные признаки
+    is_grade_junior: bool = Field(False, description="Грейд кандидата: Junior")
+    is_grade_middle: bool = Field(False, description="Грейд кандидата: Middle")
+    is_grade_senior: bool = Field(False, description="Грейд кандидата: Senior")
+    is_grade_management: bool = Field(False, description="Грейд кандидата: Management / Руководитель")
+
     # 1. Группа Soft Skills
     skill_general_negotiations: bool = False
     skill_vip_negotiations: bool = False
@@ -28,7 +35,7 @@ class PredictionRequest(BaseModel):
     skill_result_defense: bool = False
     skill_mentoring_coaching: bool = False
     skill_initiative_proactivity: bool = False
-    
+
     # 2. Группа Hard Skills
     skill_pc_tablet_advanced: bool = False
     skill_abs_crm: bool = False
@@ -44,7 +51,7 @@ class PredictionRequest(BaseModel):
     skill_finance_cert_cfa: bool = False
     skill_finance_cert_frm: bool = False
     skill_finance_cert_fsfr: bool = False
-    
+
     # 3. Группа Business Skills
     skill_kpi_system_management: bool = False
     skill_kpi_troubleshooting_eda: bool = False
@@ -57,20 +64,22 @@ class PredictionRequest(BaseModel):
     skill_banking_regulation_basel: bool = False
     skill_compliance_aml_kyc: bool = False
     skill_hr_analytics_metrics: bool = False
-    
+
     # 4. Группа SOCIAL_INFRA_TRIGGERS
     edu_level_encoded: bool = True
     has_car_and_driver_license: bool = False
     has_remote_hybrid_schedule: bool = False
-    
+
     # Текст резюме для BERT + PCA + Regex разбора на воркере
     raw_text: str = Field(..., example="Полный текст резюме соискателя")
+
 
 class PredictionResponse(BaseModel):
     task_id: str
     status: str
 
-# Добавляем класс FeedbackRequest для восстановления бэкенда FastAPI
+
+# Класс FeedbackRequest для мониторинга Acceptance Rate
 class FeedbackRequest(BaseModel):
     prediction_id: int
     hr_accepted: bool
