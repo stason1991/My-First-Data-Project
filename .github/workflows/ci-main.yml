@@ -18,7 +18,7 @@ jobs:
 
     # Настраиваем Python (версия 3.10)
     - name: Set up Python
-      uses: actions/python-version@v4  # Исправлен экшен для настройки Python
+      uses: actions/setup-python@v5  # Исправлен экшен для настройки Python
       with:
         python-version: '3.10'
 
