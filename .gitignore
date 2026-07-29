@@ -1,0 +1,37 @@
+data/*
+!data/.gitkeep
+
+# Конкретные файлы
+Битва с авторизацией hh.txt
+Бенчмарк презентация.pdf
+Бенчмарки (оформление по примеру).xlsx
+
+# Резервный код, если api одобрят
+Было, если бы был API/
+
+# Кэш Python
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+#и веса
+.huggingface/
+
+# Исключаем локальные папки моделей (они разворачиваются на хосте через Docker volumes)
+models/
+
+# Исключаем виртуальные окружения Anaconda и кэш Python
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+#Ключи
+.env
+*.pdf

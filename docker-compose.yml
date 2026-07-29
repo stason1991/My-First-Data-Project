@@ -1,0 +1,94 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: salary_postgres_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: salary_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always # Автоматический перезапуск СУБД при сбоях хоста
+    networks:
+      - salary_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: salary_redis_broker
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - salary_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    container_name: salary_fastapi_backend
+    # Добавлен флаг --reload (авто-обновление кода без пересборки)
+    command: uvicorn backend:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+      - ./models:/app/models
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/salary_db
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app:/root/.local/lib/python3.10/site-packages
+    depends_on:
+      - db
+      - redis
+    restart: on-failure
+    networks:
+      - salary_network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    container_name: salary_celery_worker
+    # Убран блокирующий --pool=solo. 
+    # Внедрен prefork-пул с --concurrency=4, что позволяет обрабатывать до 4 резюме синхронно,
+    # задействуя многопоточность процессора хоста для расчета RuBERT и SHAP.
+    command: celery -A scripts.workers.celery_app worker --loglevel=info --pool=prefork --concurrency=4
+    volumes:
+      - .:/app
+      - ./models:/app/models
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/salary_db
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app:/root/.local/lib/python3.10/site-packages
+    depends_on:
+      - redis
+      - db
+    restart: on-failure
+    networks:
+      - salary_network
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: salary_streamlit_ui
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app # Позволяет Streamlit подтягивать изменения UI налету
+    depends_on:
+      - backend
+    restart: on-failure
+    networks:
+      - salary_network
+
+networks:
+  salary_network:
+    driver: bridge
+
+volumes:
+  postgres_data:

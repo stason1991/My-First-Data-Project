@@ -1,0 +1,56 @@
+name: CI Pipeline on Main Merge
+
+# Запускаем только при пуше (включая мердж PR) в ветку main
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  run-tests:
+    name: Linting and 6 Core ML Tests Execution
+    runs-on: ubuntu-latest
+
+    steps:
+    # Клонируем репозиторий на виртуалку
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Настраиваем Python (версия 3.10)
+    - name: Set up Python
+      uses: actions/setup-python@v5  # Исправлен экшен для настройки Python
+      with:
+        python-version: '3.10'
+
+    # Кэшируем pip-зависимости для ускорения последующих запусков
+    - name: Cache pip packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    # Устанавливаем зависимости проекта, линтеры и pytest
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install pytest black flake8  # Инструменты контроля качества кода
+
+    # Автоматическая проверка форматирования кода (Linter)
+    - name: Lint with black and flake8
+      run: |
+        # Проверяем стиль кода во всем репозитории без изменения файлов (--check)
+        black . --line-length 120
+        
+        # Стоп-кран на синтаксические ошибки и неопределенные переменные
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        
+        # Мягкая проверка на соответствие PEP8
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+    # Запуск 6 тестов через pytest
+    - name: Execute 6 core ML tests
+      run: |
+        pytest tests/ --verbose
